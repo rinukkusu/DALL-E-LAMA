@@ -16,6 +16,9 @@ namespace DALL_E_LAMA.Data.Models
     {
         [StringLength(64)]
         public string Id { get; set; }
+        
+        [StringLength(64)]
+        public string TaskId { get; set; }
 
         public int MessageId { get; set; }
     }
