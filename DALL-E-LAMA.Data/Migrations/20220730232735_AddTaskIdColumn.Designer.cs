@@ -2,6 +2,7 @@
 using DALL_E_LAMA.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -9,9 +10,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DALL_E_LAMA.Data.Migrations
 {
     [DbContext(typeof(DalleDbContext))]
-    partial class DalleDbContextModelSnapshot : ModelSnapshot
+    [Migration("20220730232735_AddTaskIdColumn")]
+    partial class AddTaskIdColumn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "6.0.7");

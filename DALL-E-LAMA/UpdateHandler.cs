@@ -28,7 +28,7 @@ namespace DALL_E_LAMA
         public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
             Console.WriteLine($"{update.Message?.From?.Username}: {update.Message?.Text}");
-            
+
             try
             {
                 await ProcessCallbackQueries(botClient, update);
@@ -37,7 +37,7 @@ namespace DALL_E_LAMA
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
-                await botClient.SendTextMessageAsync(update.Message.Chat.Id, ex.Message, null, null, null, null, null, update.Message.MessageId);
+                await botClient.SendTextMessageAsync(update.Message?.Chat.Id ?? update.CallbackQuery?.Message?.Chat.Id, ex.Message, null, null, null, null, null, update.Message?.MessageId, true);
             }
         }
 
@@ -46,28 +46,26 @@ namespace DALL_E_LAMA
             if (update.CallbackQuery == null && update.CallbackQuery?.Data == null)
                 return;
 
-            switch (update.CallbackQuery.Message?.Text)
-            {
-                case "Download WebP":
-                {
-                    using var db = new DalleDbContext();
-                    var generation = await db.Generations.FirstOrDefaultAsync(x => x.Id == update.CallbackQuery.Data);
-                    if (generation == null)
-                        throw new Exception("Sorry, this image is not in my database.");
+            using var db = new DalleDbContext();
+            var generation = await db.Generations.FirstOrDefaultAsync(x => x.Id == update.CallbackQuery.Data);
+            if (generation == null)
+                throw new Exception("Sorry, this image is not in my database.");
 
-                    var task = await _dalleClient.GetTask(generation.TaskId);
+            if (string.IsNullOrEmpty(generation.TaskId))
+                throw new Exception("Sorry, I don't have the corresponding TaskId for that image, check with Max hehe");
 
-                    var generationEntry = task.Generations.Data.FirstOrDefault(x => x.Id == generation.Id);
-                    var webpBytes = await _httpClient.GetByteArrayAsync(generationEntry.Generation.ImagePath);
-                    using var stream = new MemoryStream(webpBytes);
+            var task = await _dalleClient.GetTask(generation.TaskId);
 
-                    await botClient.SendDocumentAsync(update.Message.Chat.Id,
-                        new InputOnlineFile(stream, $"{generation.Id}.webp"), null,
-                        null, null, null, null, null, null, update.Message.MessageId);
+            var generationEntry = task.Generations.Data.FirstOrDefault(x => x.Id == generation.Id);
+            var webpBytes = await _httpClient.GetByteArrayAsync(generationEntry.Generation.ImagePath);
+            using var image = Image.Load(webpBytes);
 
-                    break;
-                }
-            }
+            var stream = new MemoryStream();
+            image?.SaveAsPng(stream);
+            stream.Seek(0, SeekOrigin.Begin);
+
+            await botClient.SendDocumentAsync(update.CallbackQuery?.From.Id,
+                new InputOnlineFile(stream, $"{generation.Id}.png"));
 
             return;
         }
@@ -125,16 +123,9 @@ namespace DALL_E_LAMA
 
             var imageBytes = await _dalleClient.DownloadGeneration(generation.Id);
             using var stream = new MemoryStream(imageBytes);
-            
-            var downloadKeyboard = new InlineKeyboardMarkup(
-                new InlineKeyboardButton[]
-                {
-                    InlineKeyboardButton.WithCallbackData("Download WebP", generation.Id),
-                }
-            );
 
             await botClient.SendDocumentAsync(update.Message.Chat.Id, new InputOnlineFile(stream, $"{generation.Id}.jpg"), null,
-                null, null, null, null, null, null, update.Message.MessageId, null, downloadKeyboard);
+                null, null, null, null, null, null, update.Message.MessageId);
         }
 
         private async Task ProcessDalleCommand(ITelegramBotClient botClient, Update update, string arguments,
@@ -151,57 +142,59 @@ namespace DALL_E_LAMA
             }
 
             if (task?.Status == "rejected")
-            {
                 throw new Exception(task?.StatusInformation?.Message);
-            }
-            else
+
+            if (task?.Status == "cancelled")
+                throw new Exception("The request was cancelled by OpenAI (Maintenance?)");
+
+            await botClient.SendChatActionAsync(update.Message.Chat.Id, ChatAction.UploadPhoto);
+
+            var generationIds = task.Generations.Data.Select(x => x.Id).ToList();
+            List<InputMediaPhoto> images = new();
+            List<MemoryStream> streams = new();
+
+            foreach (var generation in task.Generations.Data)
             {
-                await botClient.SendChatActionAsync(update.Message.Chat.Id, ChatAction.UploadPhoto);
+                var imageBytes = await _httpClient.GetByteArrayAsync(generation.Generation.ImagePath);
+                using var image = Image.Load(imageBytes);
 
-                var generationIds = task.Generations.Data.Select(x => x.Id).ToList();
-                List<InputMediaPhoto> images = new();
-                List<MemoryStream> streams = new();
+                var stream = new MemoryStream();
+                image.SaveAsJpeg(stream);
+                stream.Seek(0, SeekOrigin.Begin);
 
-                foreach (var generation in task.Generations.Data)
-                {
-                    var imageBytes = await _httpClient.GetByteArrayAsync(generation.Generation.ImagePath);
-                    using var image = Image.Load(imageBytes);
-
-                    var stream = new MemoryStream();
-                    image.SaveAsJpeg(stream);
-                    stream.Seek(0, SeekOrigin.Begin);
-
-                    streams.Add(stream);
-                    images.Add(new InputMediaPhoto(new InputMedia(stream, $"{generation.Id}.jpg")));
-                }
-
-                var credits = await _dalleClient.GetRemainingCredits();
-
-                images.First().Caption = $"Credits left: {credits.AggregateCredits}";
-
-                var messages =
-                    await botClient.SendMediaGroupAsync(update.Message.Chat.Id, images, null, null, update.Message.MessageId);
-
-                using var db = new DalleDbContext();
-                for (int i = 0; i < messages.Length; i++)
-                {
-                    db.Generations.Add(new Data.Models.Generation
-                    {
-                        Id = generationIds[i],
-                        TaskId = task.Id,
-                        MessageId = messages[i].MessageId
-                    });
-                }
-
-                await db.SaveChangesAsync();
-
-                foreach (var s in streams)
-                {
-                    s.Dispose();
-                }
+                streams.Add(stream);
+                images.Add(new InputMediaPhoto(new InputMedia(stream, $"{generation.Id}.jpg")));
             }
 
-            return;
+            var credits = await _dalleClient.GetRemainingCredits();
+
+            var messages =
+                await botClient.SendMediaGroupAsync(update.Message.Chat.Id, images, null, null, update.Message.MessageId);
+
+            using var db = new DalleDbContext();
+            for (int i = 0; i < messages.Length; i++)
+            {
+                db.Generations.Add(new Data.Models.Generation
+                {
+                    Id = generationIds[i],
+                    TaskId = task.Id,
+                    MessageId = messages[i].MessageId
+                });
+            }
+
+            await db.SaveChangesAsync();
+
+            foreach (var s in streams)
+            {
+                s.Dispose();
+            }
+
+            var caption = $"Credits left: {credits.AggregateCredits}{Environment.NewLine}Download images:";
+
+            var buttons = generationIds.Select((x, i) => InlineKeyboardButton.WithCallbackData($"{i + 1}", x));
+            var downloadKeyboard = new InlineKeyboardMarkup(buttons);
+
+            await botClient.SendTextMessageAsync(update.Message.Chat.Id, caption, null, null, null, true, null, null, null, downloadKeyboard);
         }
 
         public Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
