@@ -14,6 +14,9 @@ using DALL_E_LAMA.Data;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using Telegram.Bot.Exceptions;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace DALL_E_LAMA
 {
@@ -150,61 +153,71 @@ namespace DALL_E_LAMA
             await botClient.SendChatActionAsync(update.Message.Chat.Id, ChatAction.UploadPhoto);
 
             var generationIds = task.Generations.Data.Select(x => x.Id).ToList();
-            List<InputMediaPhoto> images = new();
-            List<MemoryStream> streams = new();
 
-            foreach (var generation in task.Generations.Data)
+            using var fullImage = new Image<Rgb24>(1024, 1024);
+
+            var imageBytes1 = await _httpClient.GetByteArrayAsync(task.Generations.Data[0].Generation.ImagePath);
+            using var image1 = Image.Load(imageBytes1);
+            image1.Mutate(o => o.Resize(new Size(512, 512)));
+
+            var imageBytes2 = await _httpClient.GetByteArrayAsync(task.Generations.Data[1].Generation.ImagePath);
+            using var image2 = Image.Load(imageBytes2);
+            image2.Mutate(o => o.Resize(new Size(512, 512)));
+
+            var imageBytes3 = await _httpClient.GetByteArrayAsync(task.Generations.Data[2].Generation.ImagePath);
+            using var image3 = Image.Load(imageBytes3);
+            image3.Mutate(o => o.Resize(new Size(512, 512)));
+
+            var imageBytes4 = await _httpClient.GetByteArrayAsync(task.Generations.Data[3].Generation.ImagePath);
+            using var image4 = Image.Load(imageBytes4);
+            image4.Mutate(o => o.Resize(new Size(512, 512)));
+
+            fullImage.Mutate(o =>
             {
-                var imageBytes = await _httpClient.GetByteArrayAsync(generation.Generation.ImagePath);
-                using var image = Image.Load(imageBytes);
+                o.DrawImage(image1, new Point(0, 0), 1f);
+                o.DrawImage(image2, new Point(512, 0), 1f);
+                o.DrawImage(image3, new Point(0, 512), 1f);
+                o.DrawImage(image4, new Point(512, 512), 1f);
+            });
 
-                var stream = new MemoryStream();
-                image.SaveAsJpeg(stream);
-                stream.Seek(0, SeekOrigin.Begin);
-
-                streams.Add(stream);
-                images.Add(new InputMediaPhoto(new InputMedia(stream, $"{generation.Id}.jpg")));
-            }
+            using var stream = new MemoryStream();
+            await fullImage.SaveAsPngAsync(stream);
+            stream.Seek(0, SeekOrigin.Begin);
 
             var credits = await _dalleClient.GetRemainingCredits();
 
-            var messages =
-                await botClient.SendMediaGroupAsync(update.Message.Chat.Id, images, null, null, update.Message.MessageId);
+            var caption = $"Credits left: {credits.AggregateCredits}{Environment.NewLine}Download images:";
+            var buttons = generationIds.Select((x, i) => InlineKeyboardButton.WithCallbackData($"{i + 1}", x));
+            var downloadKeyboard = new InlineKeyboardMarkup(buttons);
+
+            var message =
+                await botClient.SendPhotoAsync(update.Message.Chat.Id, new InputOnlineFile(stream), caption, null, null, null, null, update.Message.MessageId, null, downloadKeyboard);
 
             using var db = new DalleDbContext();
-            for (int i = 0; i < messages.Length; i++)
+            for (int i = 0; i < generationIds.Count(); i++)
             {
                 db.Generations.Add(new Data.Models.Generation
                 {
                     Id = generationIds[i],
                     TaskId = task.Id,
-                    MessageId = messages[i].MessageId
+                    MessageId = message.MessageId
                 });
             }
 
             await db.SaveChangesAsync();
-
-            foreach (var s in streams)
-            {
-                s.Dispose();
-            }
-
-            var caption = $"Credits left: {credits.AggregateCredits}{Environment.NewLine}Download images:";
-
-            var buttons = generationIds.Select((x, i) => InlineKeyboardButton.WithCallbackData($"{i + 1}", x));
-            var downloadKeyboard = new InlineKeyboardMarkup(buttons);
-
-            await botClient.SendTextMessageAsync(update.Message.Chat.Id, caption, null, null, null, true, null, null, null, downloadKeyboard);
         }
 
-        public Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
+        public async Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
         {
             var currentColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine(exception);
             Console.ForegroundColor = currentColor;
 
-            return Task.CompletedTask;
+            if (exception is ApiRequestException apiRequestException)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(apiRequestException.Parameters?.RetryAfter ?? 5), cancellationToken);
+            }
         }
     }
 }

@@ -17,3 +17,5 @@ var me = await botClient.GetMeAsync();
 
 Console.WriteLine($"Start listening for @{me.Username}");
 Console.ReadLine();
+
+cts.Cancel();
