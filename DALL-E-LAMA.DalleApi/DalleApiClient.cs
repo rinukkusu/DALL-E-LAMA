@@ -21,10 +21,11 @@ namespace DALL_E_LAMA.DalleApi
             _bearerToken = bearerToken;
             _client = new HttpClient
             {
-                BaseAddress = new Uri("https://labs.openai.com/api/labs/")
+                BaseAddress = new Uri("https://labs.openai.com/api/labs/"),
             };
 
             _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _bearerToken);
+            _client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:102.0) Gecko/20100101 Firefox/102.0");
         }
 
         private async Task<string> Try(Func<Task<HttpResponseMessage>> func)
