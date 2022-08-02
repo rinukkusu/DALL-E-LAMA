@@ -17,6 +17,8 @@ using Telegram.Bot.Types.ReplyMarkups;
 using Telegram.Bot.Exceptions;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.Fonts;
 
 namespace DALL_E_LAMA
 {
@@ -27,6 +29,14 @@ namespace DALL_E_LAMA
         private static readonly string DALLE_API_TOKEN = Environment.GetEnvironmentVariable("DALLE_API_TOKEN");
         private readonly DalleApiClient _dalleClient = new DalleApiClient(DALLE_API_TOKEN);
         private readonly HttpClient _httpClient = new HttpClient();
+        private readonly Font _font;
+
+        public UpdateHandler()
+        {
+            FontCollection collection = new();
+            FontFamily family = collection.Add("waltographUI.ttf");
+            _font = family.CreateFont(36, FontStyle.Regular);
+        }
 
         public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
@@ -158,19 +168,59 @@ namespace DALL_E_LAMA
 
             var imageBytes1 = await _httpClient.GetByteArrayAsync(task.Generations.Data[0].Generation.ImagePath);
             using var image1 = Image.Load(imageBytes1);
-            image1.Mutate(o => o.Resize(new Size(512, 512)));
+            image1.Mutate(o => o
+                .Resize(new Size(512, 512))
+                .DrawText("1", _font, Color.White, new PointF(10 - 2, 10))
+                .DrawText("1", _font, Color.White, new PointF(10 - 2, 10 - 2))
+                .DrawText("1", _font, Color.White, new PointF(10, 10 - 2))
+                .DrawText("1", _font, Color.White, new PointF(10 + 2, 10 - 2))
+                .DrawText("1", _font, Color.White, new PointF(10 + 2, 10))
+                .DrawText("1", _font, Color.White, new PointF(10 + 2, 10 + 2))
+                .DrawText("1", _font, Color.White, new PointF(10, 10 + 2))
+                .DrawText("1", _font, Color.White, new PointF(10 - 2, 10 + 2))
+                .DrawText("1", _font, Color.Black, new PointF(10, 10)));
 
             var imageBytes2 = await _httpClient.GetByteArrayAsync(task.Generations.Data[1].Generation.ImagePath);
             using var image2 = Image.Load(imageBytes2);
-            image2.Mutate(o => o.Resize(new Size(512, 512)));
+            image2.Mutate(o => o
+                .Resize(new Size(512, 512))
+                .DrawText("2", _font, Color.White, new PointF(10 - 2, 10))
+                .DrawText("2", _font, Color.White, new PointF(10 - 2, 10 - 2))
+                .DrawText("2", _font, Color.White, new PointF(10, 10 - 2))
+                .DrawText("2", _font, Color.White, new PointF(10 + 2, 10 - 2))
+                .DrawText("2", _font, Color.White, new PointF(10 + 2, 10))
+                .DrawText("2", _font, Color.White, new PointF(10 + 2, 10 + 2))
+                .DrawText("2", _font, Color.White, new PointF(10, 10 + 2))
+                .DrawText("2", _font, Color.White, new PointF(10 - 2, 10 + 2))
+                .DrawText("2", _font, Color.Black, new PointF(10, 10)));
 
             var imageBytes3 = await _httpClient.GetByteArrayAsync(task.Generations.Data[2].Generation.ImagePath);
             using var image3 = Image.Load(imageBytes3);
-            image3.Mutate(o => o.Resize(new Size(512, 512)));
+            image3.Mutate(o => o
+                .Resize(new Size(512, 512))
+                .DrawText("3", _font, Color.White, new PointF(10 - 2, 10))
+                .DrawText("3", _font, Color.White, new PointF(10 - 2, 10 - 2))
+                .DrawText("3", _font, Color.White, new PointF(10, 10 - 2))
+                .DrawText("3", _font, Color.White, new PointF(10 + 2, 10 - 2))
+                .DrawText("3", _font, Color.White, new PointF(10 + 2, 10))
+                .DrawText("3", _font, Color.White, new PointF(10 + 2, 10 + 2))
+                .DrawText("3", _font, Color.White, new PointF(10, 10 + 2))
+                .DrawText("3", _font, Color.White, new PointF(10 - 2, 10 + 2))
+                .DrawText("3", _font, Color.Black, new PointF(10, 10)));
 
             var imageBytes4 = await _httpClient.GetByteArrayAsync(task.Generations.Data[3].Generation.ImagePath);
             using var image4 = Image.Load(imageBytes4);
-            image4.Mutate(o => o.Resize(new Size(512, 512)));
+            image4.Mutate(o => o
+                .Resize(new Size(512, 512))
+                .DrawText("4", _font, Color.White, new PointF(10 - 2, 10))
+                .DrawText("4", _font, Color.White, new PointF(10 - 2, 10 - 2))
+                .DrawText("4", _font, Color.White, new PointF(10, 10 - 2))
+                .DrawText("4", _font, Color.White, new PointF(10 + 2, 10 - 2))
+                .DrawText("4", _font, Color.White, new PointF(10 + 2, 10))
+                .DrawText("4", _font, Color.White, new PointF(10 + 2, 10 + 2))
+                .DrawText("4", _font, Color.White, new PointF(10, 10 + 2))
+                .DrawText("4", _font, Color.White, new PointF(10 - 2, 10 + 2))
+                .DrawText("4", _font, Color.Black, new PointF(10, 10)));
 
             fullImage.Mutate(o =>
             {
